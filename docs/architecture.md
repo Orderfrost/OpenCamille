@@ -1,145 +1,75 @@
-# OpenCamille Architecture
+# OpenCamille 架构文档
 
-> Version: 0.1.0-draft | Date: 2025-06-23
+> 状态: 澄清中 | 日期: 2025-06-23
 >
-> This document records all architectural decisions made during the initial
-> design phase. Each decision is grounded in a comparative study of Claude Code,
-> Codex, OpenClaw, and OpenCode. See `docs/research/` for the full study.
+> 本文档记录 OpenCamille Agent Harness 的顶层架构设计。
+> 模块级实现细节见 [`architecture-modules.md`](architecture-modules.md)。
 
 ---
 
-## 1. System Overview
+## 1. 定位
 
-```
-User (CLI)
-    │
-    ▼
-┌─────────────────────────────────────────────┐
-│              PromptManager                    │
-│  L1: Base system prompt                      │
-│  L2: Dynamic context (tools, date, rules)    │
-│  L3: Memory (persistent + compressed + live) │
-│       ↓                                      │
-│  PromptAssembly { system, tools, messages }  │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────▼──────────────────────────┐
-│              Agent Loop (ReAct)              │
-│                                              │
-│  while not done:                             │
-│    ┌──────────────────────────────────────┐ │
-│    │  Think (streamed to user)             │ │
-│    │  → Model returns text or tool_calls   │ │
-│    ├──────────────────────────────────────┤ │
-│    │  if tool_calls:                       │ │
-│    │    Act (Promise.all within same turn) │ │
-│    │    → Permission.check(tool, params)   │ │
-│    │    → Execute tool                     │ │
-│    │    → Observe (result → messages)      │ │
-│    ├──────────────────────────────────────┤ │
-│    │  if stop: return final text           │ │
-│    └──────────────────────────────────────┘ │
-│                                              │
-│  Guard: max_turns=50, soft warning at 40     │
-└──────────────────┬──────────────────────────┘
-                   │
-    ┌──────────────┼──────────────┐
-    ▼              ▼              ▼
-┌────────┐  ┌──────────┐  ┌──────────┐
-│ Tool   │  │Permission│  │ Memory   │
-│ Registry│  │ Engine   │  │ Store    │
-└────────┘  └──────────┘  └──────────┘
-```
+OpenCamille 是一个 **Agent Harness**——一个运行 AI Agent 的框架/运行时。
+
+与具体 Agent 的关系：
+- **Harness（框架）**: 提供 Agent 运行所需的基础设施（循环、工具、权限、记忆、模型调用）
+- **Agent（实例）**: 运行在 Harness 之上的具体 AI，有自己的 system prompt、工具集、行为规则
+
+类比：Harness = 操作系统，Agent = 运行在操作系统上的程序。
 
 ---
 
-## 2. Module Design
+## 2. 待澄清的顶层架构问题
 
-### 2.1 Agent Loop (ReAct)
+### 2.1 整体分层
 
-- **Primary pattern**: ReAct (`Think → Act → Observe → repeat`)
-- **Optional injection points**: Plan-Execute (complex tasks), Multi-Attempt Retry (non-deterministic ops)
-- **Thinking**: start with prompt-based reasoning (provider-agnostic), add Anthropic `thinking` param later as a provider-specific optimization
-- **Termination**: `finish_reason === "stop"` + max_turns=50 with soft warning injected at turn 40
-- **Tool execution**: `Promise.all` for tool calls within the same turn (model's parallel intent), serial across turns (model needs prior results)
-- **Error handling**: raw error messages passed to model; model decides retry/alternative/report
+Agent Harness 应该分几层？每层的职责是什么？
 
-### 2.2 PromptManager
+参考：
+- Claude Code: 4 个接口汇聚到一个统一的 `queryLoop`
+- OpenClaw: Plan → Review → Execute 三阶段流水线
+- 典型分层: 接口层 → 编排层 → 执行层 → 基础设施层
 
-- **Output**: `PromptAssembly { system: string, tools: ToolDef[], messages: Message[] }` — provider-agnostic struct
-- **Assembly**: append-only across 3 layers (L1 → L2 → L3), no layer can override prior layers
-- **L1** — Base system prompt: agent identity, behavior rules, output format
-- **L2** — Dynamic context: tool list, working directory, date/time, permission rules — refreshed every turn
-- **L3** — Memory context: persistent memories + compressed summary + current conversation window
+### 2.2 接口层
 
-### 2.3 Provider Adapter
+Harness 如何接收外部输入、输出结果？
 
-- **Interface**: translates `PromptAssembly` → provider-specific request format
-- **AnthropicAdapter**: system param, tool_use blocks, tool_result user messages
-- **OpenAIAdapter**: system message, function calls, role:"tool" messages
-- **Implementation order**: Anthropic first (bare SDK), extract interface, add OpenAI
+- CLI 是唯一接口，还是预留 API/WebSocket？
+- 输入是单次命令还是持续会话？
+- 输出是纯文本还是结构化（流式文本 + 工具调用状态）？
 
-### 2.4 Tool System
+### 2.3 与模型的关系
 
-- **Definition**: custom `ToolDef { name, description, inputSchema: z.ZodType }`
-  - One zod schema → TS type + runtime validation + LLM JSON Schema (via adapter)
-- **Initial tools**: `read_file`, `write_file`, `shell_exec`
-- **Registry**: static map, tools added by configuration, not code change
+Harness 如何与 LLM 通信？
 
-### 2.5 Permission Engine (Deny-First)
+- 直接调用 SDK，还是有中间层？
+- 模型调用是 Harness 的核心循环的一部分，还是独立的服务？
+- 多模型切换是在哪一层处理的？
 
-- **Evaluation order**: deny → ask → allow (first match wins; deny always overrides allow)
-- **Tool categories**:
+### 2.4 与外部系统的连接
 
-| Level | Default | Examples |
-|-------|---------|----------|
-| safe | allow | read_file, list_dir, search |
-| write | ask | write_file, edit, move |
-| dangerous | deny | shell_exec, http_post, delete |
+Agent 通过什么机制访问外部世界？
 
-- **Session memory**: user approvals remembered within session scope; optional persist to `~/.opencamille/permissions.json`
-- **New tools**: assigned a category, inherit category behavior automatically
+- 工具系统是唯一的出口，还是有其他通道？
+- 文件系统、网络、shell——哪些是 Agent 可直接访问的？
+- 权限边界在哪里？
 
-### 2.6 Memory System (3-Tier)
+### 2.5 会话生命周期
 
-| Tier | Content | Lifetime | Storage |
-|------|---------|----------|---------|
-| Working | Full message history + reasoning chain + tool results | Current session | In-memory |
-| Compressed | Summarized early messages (hysteresis: protect 40K tokens, prune when 20K+ freed) | Current session | In-memory |
-| Persistent | User preferences, decisions, facts | Cross-session | `~/.opencamille/memory/*.md` |
+一次 Agent 会话从开始到结束的完整生命周期是什么？
 
-- **Compaction trigger**: OpenCode-style dual threshold — PRUNE_PROTECT=40K (recent window preserved), PRUNE_MINIMUM=20K (minimum reclaim to trigger)
-- **Persistent format**: one Markdown file per fact, frontmatter metadata, human-readable, git-friendly
+- 会话如何创建、如何恢复、如何结束？
+- 中间状态如何持久化（断点续跑）？
 
-### 2.7 Streaming
+### 2.6 已确认的模块（见 architecture-modules.md）
 
-- **Mixed mode**: text content streamed to user in real-time; tool call parameters buffered, executed only after complete call is received
-- **Rationale**: thinking visibility without partial-JSON complexity
+以下模块已在之前的澄清中确定了具体实现方式，将在顶层架构确定后嵌入：
 
----
-
-## 3. Decisions Not Yet Made
-
-- [ ] Concrete tool list beyond the initial 3
-- [ ] Persistent memory: frontmatter schema and file naming convention
-- [ ] Compression agent: separate model call vs. rule-based summarization
-- [ ] Multi-agent orchestration (hub-and-spoke vs. plugin SDK model)
-- [ ] Plugin/hook system for external extensions
-- [ ] Terminal UI: raw stdout vs. structured output (spinners, panels)
-
----
-
-## 4. ADR Index
-
-| ADR | Decision | Status |
-|-----|----------|--------|
-| 001 | CLI entry point | Draft |
-| 002 | Deny-first permission system | Draft |
-| 003 | Three-layer memory (working + compressed + persistent) | Draft |
-| 004 | PromptManager + Provider Adapter separation | Draft |
-| 005 | Structured tool system with custom ToolDef (zod-based) | Draft |
-| 006 | ReAct loop with composable primitives | Draft |
-| 007 | Mixed streaming (text streamed, tool calls buffered) | Draft |
-| 008 | Loop termination: max_turns + soft warning | Draft |
-| 009 | Provider: Anthropic-first, adapter for multi-provider | Draft |
-| 010 | Tool execution: parallel within turn, serial across turns | Draft |
+- Agent Loop (ReAct + 可组合原语)
+- PromptManager (三层拼接 → PromptAssembly)
+- Provider Adapter (Anthropic/OpenAI 翻译层)
+- 工具系统 (自定义 ToolDef, zod-based)
+- 权限引擎 (Deny-first, 三级分类)
+- 记忆系统 (三层: 工作 + 压缩 + 持久)
+- Streaming (混合模式)
+- 错误处理 (错误直接传递模型)
