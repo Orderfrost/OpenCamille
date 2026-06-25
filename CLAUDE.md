@@ -85,3 +85,14 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria enable independent loops. Weak criteria require constant clarification.
+
+## Development Rules
+
+### Git
+
+**Claude 只建议，不执行。** 所有 git 操作（`git add`、`git commit`、`git push`、`git branch`、`git merge`、`git rebase` 等）由开发者手动执行。
+
+- 指出需要执行哪些 git 命令，给出完整命令，但不运行它们
+- 说明为什么需要这些命令（commit 了什么、为什么是这个顺序）
+- GitHub 相关操作（`gh` CLI）同样遵循此规则
+- 例外：`git status`、`git log`、`git diff` 等只读命令不受限制

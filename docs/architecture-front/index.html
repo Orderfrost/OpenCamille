@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCamille — Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:opsz,wght@14..32,400;14..32,500;14..32,600&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- ─── BACK TO TOP ──────────────────────────── -->
+<button class="back-to-top" id="backToTop" aria-label="返回顶部">↑</button>
+
+<!-- ─── SIDEBAR ────────────────────────────── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <a href="#hero" class="sidebar-logo">
+      <span class="logo-icon">◇</span>
+      <span class="logo-text">OpenCamille</span>
+    </a>
+    <span class="logo-badge">v0.1</span>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-group-label">Architecture</div>
+    <a href="#layered" class="nav-item" data-section="layered">
+      <span class="nav-num">01</span> 分层架构
+    </a>
+    <a href="#cross" class="nav-item" data-section="cross">
+      <span class="nav-num">02</span> 横切模块
+    </a>
+    <a href="#flow" class="nav-item" data-section="flow">
+      <span class="nav-num">03</span> 数据流
+    </a>
+    <a href="#deps" class="nav-item" data-section="deps">
+      <span class="nav-num">04</span> 跨层依赖
+    </a>
+
+    <div class="nav-group-label">Subsystems</div>
+    <a href="#memory" class="nav-item" data-section="memory">
+      <span class="nav-num">05</span> MemoryStore 3-Tier
+    </a>
+    <a href="#storage" class="nav-item" data-section="storage">
+      <span class="nav-num">06</span> 存储布局
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <button class="theme-toggle" id="themeToggle" aria-label="切换暗色模式">
+      <span class="theme-icon-light">☀</span>
+      <span class="theme-icon-dark">☾</span>
+    </button>
+    <a href="https://github.com" class="sidebar-github" target="_blank" rel="noopener">GitHub ↗</a>
+  </div>
+</aside>
+
+<!-- ─── MOBILE NAV TOGGLE ──────────────────── -->
+<button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="菜单">
+  <span></span><span></span><span></span>
+</button>
+
+<!-- ─── MAIN CONTENT ────────────────────────── -->
+<main class="main">
+
+  <!-- HERO -->
+  <section class="hero" id="hero">
+    <div class="hero-text">
+      <div class="hero-eyebrow">Agent Harness · Architecture Blueprint</div>
+      <h1 class="hero-title">OpenCamille<br><em>5-Layer Runtime</em></h1>
+      <p class="hero-desc">
+        为 AI Agent 提供运行基础设施——会话管理、工具系统、权限控制、记忆存储。
+        参考 Claude Code / OpenClaw / Codex 设计验证。
+      </p>
+      <div class="hero-tags">
+        <span class="tag tag-layers">5 Layers</span>
+        <span class="tag tag-cross">4 Cross-Cutting</span>
+        <span class="tag tag-memory">3-Tier Memory</span>
+        <span class="tag tag-agents">Hub-and-Spoke</span>
+      </div>
+    </div>
+
+    <div class="hero-visual" aria-hidden="true">
+      <div class="mini-layer l1"><span>Interface</span></div>
+      <div class="mini-layer l2"><span>Session</span></div>
+      <div class="mini-layer l3"><span>Agent</span></div>
+      <div class="mini-layer l4"><span>Service</span></div>
+      <div class="mini-layer l5"><span>Infrastructure</span></div>
+    </div>
+  </section>
+
+  <!-- SECTION 1: LAYERED ARCHITECTURE -->
+  <section class="section" id="layered">
+    <div class="section-head">
+      <span class="section-num">01</span>
+      <div>
+        <h2 class="section-title">分层架构</h2>
+        <p class="section-desc">Interface → Session → Agent → Service → Infrastructure，逐层正向依赖。横切模块无层限制。</p>
+      </div>
+    </div>
+
+    <div class="layer-diagram" id="layerDiagram">
+      <div class="layer-row" data-layer="interface">
+        <div class="layer-gutter">
+          <div class="layer-idx" style="--accent: var(--blue)">L1</div>
+          <div class="layer-name">Interface</div>
+          <div class="layer-role">用户交互 · 命令路由</div>
+        </div>
+        <div class="layer-modules">
+          <span class="mod-chip">Input Capture <small>CLI(stdin) / Web(HTTP)</small></span>
+          <span class="mod-chip">Output Render <small>TUI(ink) / Web(SSE)</small></span>
+          <span class="mod-chip flow-chip"><span class="flow-dot"></span>CommandRouter <small>/harness · /agent · /skill</small></span>
+          <span class="mod-chip">Multi-Interface <small>多界面订阅同一 Session</small></span>
+        </div>
+        <button class="layer-expand" aria-label="展开 Interface 详情" data-layer="interface">→</button>
+      </div>
+
+      <div class="layer-row" data-layer="session">
+        <div class="layer-gutter">
+          <div class="layer-idx" style="--accent: var(--cyan)">L2</div>
+          <div class="layer-name">Session</div>
+          <div class="layer-role">会话容器 · 生命周期 · 对话历史 owner</div>
+        </div>
+        <div class="layer-modules">
+          <span class="mod-chip">ConversationHistory <small>Message[] 唯一所有者</small></span>
+          <span class="mod-chip">Lifecycle <small>idle → active → paused → ended</small></span>
+          <span class="mod-chip flow-chip"><span class="flow-dot"></span>Blocking Waits <small>waitForApproval · waitForUserInput</small></span>
+          <span class="mod-chip">Persistence <small>Infra.SessionStore (JSONL)</small></span>
+          <span class="mod-chip">Agent Swap <small>运行时替换 · 保留对话历史</small></span>
+        </div>
+        <button class="layer-expand" aria-label="展开 Session 详情" data-layer="session">→</button>
+      </div>
+
+      <div class="layer-row is-core" data-layer="agent">
+        <div class="layer-gutter">
+          <div class="layer-idx" style="--accent: var(--amber)">L3</div>
+          <div class="layer-name">Agent <span class="core-badge">Core</span></div>
+          <div class="layer-role">Agent 定义 · Loop · 子Agent · Skill 切换</div>
+        </div>
+        <div class="layer-modules">
+          <span class="mod-chip">Identity &amp; Tools <small>systemPrompt · Tool[] · ModelConfig</small></span>
+          <span class="mod-chip">AgentFactory <small>config → Agent 实例</small></span>
+          <span class="mod-chip">ModeSwitcher <small>ReAct / plan-and-solve</small></span>
+          <span class="mod-chip">Skill Switch <small>L1 身份不变 · L2 能力变更</small></span>
+          <span class="mod-chip">Presets <small>cautious · balanced · auto</small></span>
+
+          <div class="loop-strip">
+            <div class="loop-strip-label">⟳ Agent Loop</div>
+            <div class="loop-chain">
+              <span class="loop-step s1">ContextManager<br>.assemble()</span>
+              <span class="loop-arr">→</span>
+              <span class="loop-step s2">ThinkStep<br>模型调用</span>
+              <span class="loop-arr">→</span>
+              <span class="loop-step s3">GuardStep<br>终止检查</span>
+              <span class="loop-arr">→</span>
+              <span class="loop-step s4">ActStep<br>工具执行</span>
+              <span class="loop-arr">→</span>
+              <span class="loop-step s5">ObserveStep<br>写入消息</span>
+              <span class="loop-arr">→</span>
+              <span class="loop-step">Terminate<br>Step</span>
+            </div>
+          </div>
+
+          <div class="sub-strip">
+            <div class="sub-strip-label">◈ Sub-Agent (Hub-and-Spoke)</div>
+            <div class="sub-items">
+              <span>mainAgent.spawn()</span><span class="sub-sep">·</span>
+              <span>独立 AgentLoop</span><span class="sub-sep">·</span>
+              <span>独立上下文窗口</span><span class="sub-sep">·</span>
+              <span>权限 ≤ 主 Agent</span><span class="sub-sep">·</span>
+              <span>返回摘要</span>
+            </div>
+          </div>
+        </div>
+        <button class="layer-expand" aria-label="展开 Agent 详情" data-layer="agent">→</button>
+      </div>
+
+      <div class="layer-row" data-layer="service">
+        <div class="layer-gutter">
+          <div class="layer-idx" style="--accent: var(--rose)">L4</div>
+          <div class="layer-name">Service</div>
+          <div class="layer-role">工具系统 · 权限引擎 · MCP 接入</div>
+        </div>
+        <div class="layer-modules">
+          <span class="mod-chip">ToolRegistry <small>read_file · write_file · shell_exec · agent_task · MCP:*</small></span>
+          <span class="mod-chip">ToolDef <small>zod → TS类型 + JSON Schema + 校验</small></span>
+          <span class="mod-chip flow-chip"><span class="flow-dot"></span>PermissionEngine <small>Deny-first: deny → ask → allow</small></span>
+          <span class="mod-chip flow-chip"><span class="flow-dot"></span>InterceptorChain <small>Guard → Permission → Execute</small></span>
+        </div>
+        <button class="layer-expand" aria-label="展开 Service 详情" data-layer="service">→</button>
+      </div>
+
+      <div class="layer-row" data-layer="infrastructure">
+        <div class="layer-gutter">
+          <div class="layer-idx" style="--accent: var(--purple)">L5</div>
+          <div class="layer-name">Infrastructure</div>
+          <div class="layer-role">可替换基础能力 · 独立可测</div>
+        </div>
+        <div class="layer-modules">
+          <span class="mod-chip">Lifecycle <small>统一生命周期 before/after 回调</small></span>
+          <span class="mod-chip">ProviderAdapter <small>Streaming归一化 · 消息翻译</small></span>
+          <span class="mod-chip">MemoryStore <small>3-Tier + CompactionAgent</small></span>
+          <span class="mod-chip">ConfigLoader <small>内置→用户→项目→CLI→env</small></span>
+          <span class="mod-chip">SessionStore <small>JSONL + JSON + checkpoints</small></span>
+          <span class="mod-chip">TraceStore <small>OpenTelemetry Span Tracing</small></span>
+          <span class="mod-chip">MCPClient <small>stdio / HTTP</small></span>
+          <span class="mod-chip">SkillLoader <small>Anthropic L1/L2/L3 标准</small></span>
+          <span class="mod-chip">CommandRegistry <small>命令定义 · 可用范围</small></span>
+          <span class="mod-chip">SessionRegistry <small>Session 查找 · 跨进程预留</small></span>
+        </div>
+        <button class="layer-expand" aria-label="展开 Infrastructure 详情" data-layer="infrastructure">→</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 2: CROSS-CUTTING -->
+  <section class="section" id="cross">
+    <div class="section-head">
+      <span class="section-num">02</span>
+      <div>
+        <h2 class="section-title">横切模块</h2>
+        <p class="section-desc">跨越多个层级，无层级访问限制，协调跨层关注面。</p>
+      </div>
+    </div>
+    <div class="cross-grid">
+      <div class="cross-card">
+        <h4>Lifecycle</h4>
+        <p>统一生命周期系统：before 回调可阻断（deny/ask/allow），after 回调只观察（fire-and-forget）</p>
+        <div class="cross-spans">spans: All layers · 节点: session/agent/turn/tool/subagent/memory</div>
+      </div>
+      <div class="cross-card">
+        <h4>ContextManager</h4>
+        <p>组装 ContextAssembly {system, reminders, tools, messages}，适配 Anthropic/OpenAI 注入差异</p>
+        <div class="cross-spans">spans: Agent · MemoryStore · RuleLoader · SkillLoader</div>
+      </div>
+      <div class="cross-card">
+        <h4>SkillLoader</h4>
+        <p>Anthropic 标准渐进式加载：L1 元数据始终在上下文 → L2 触发时注入 → L3 按需读取</p>
+        <div class="cross-spans">spans: Agent · Service · Infrastructure</div>
+      </div>
+      <div class="cross-card">
+        <h4>ProviderAdapter</h4>
+        <p>Streaming 归一化：Anthropic/OpenAI stream → StreamEvent。自定义通用 Message 格式</p>
+        <div class="cross-spans">spans: Infrastructure → Agent (ThinkStep)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 3: DATA FLOW -->
+  <section class="section" id="flow">
+    <div class="section-head">
+      <span class="section-num">03</span>
+      <div>
+        <h2 class="section-title">数据流</h2>
+        <p class="section-desc">主流程同步执行（StreamEvent 直接返回），事件通知异步广播（EventBus pub/sub）。</p>
+      </div>
+    </div>
+
+    <div class="flow-block">
+      <h3 class="flow-label sync-label">● Sync — Main Execution Path</h3>
+      <div class="flow-row">
+        <span class="flow-node fn-hl">Interface<br><small>handleInput</small></span>
+        <span class="fn-arrow">→</span>
+        <span class="flow-node">Session<br><small>路由</small></span>
+        <span class="fn-arrow">→</span>
+        <span class="flow-node fn-hl">Agent<br><small>ContextManager</small></span>
+        <span class="fn-arrow">→</span>
+        <span class="flow-node">ThinkStep<br><small>ProviderAdapter</small></span>
+        <span class="fn-arrow">→</span>
+        <span class="flow-node">GuardStep<br><small>终止检查</small></span>
+        <span class="fn-arrow">→</span>
+        <span class="flow-node fn-hl">ActStep<br><small>Interceptor→Tool</small></span>
+        <span class="fn-arrow">→</span>
+        <span class="flow-node">ObserveStep<br><small>写入 messages</small></span>
+        <span class="fn-arrow">→</span>
+        <span class="flow-node">Interface<br><small>StreamEvent渲染</small></span>
+      </div>
+    </div>
+
+    <div class="flow-block" style="margin-top:clamp(24px, 4vw, 48px);">
+      <h3 class="flow-label async-label">○ Async — Event Stream</h3>
+      <div class="event-grid">
+        <div class="event-card">
+          <div class="event-layer">Interface</div>
+          <div class="event-name">"input.received"</div>
+        </div>
+        <div class="event-card">
+          <div class="event-layer">Session</div>
+          <div class="event-name">"session.state_changed"</div>
+          <div class="event-name">"session.agent_swapped"</div>
+        </div>
+        <div class="event-card">
+          <div class="event-layer">Agent</div>
+          <div class="event-name">"agent.turn.completed"</div>
+        </div>
+        <div class="event-card">
+          <div class="event-layer">Service</div>
+          <div class="event-name">"tool.executed"</div>
+          <div class="event-name">"permission.denied"</div>
+        </div>
+      </div>
+      <p class="flow-consumers">Consumers: TraceStore · TUI panels · Hook scripts · Plugin</p>
+    </div>
+  </section>
+
+  <!-- SECTION 4: DEPENDENCIES -->
+  <section class="section" id="deps">
+    <div class="section-head">
+      <span class="section-num">04</span>
+      <div>
+        <h2 class="section-title">跨层依赖</h2>
+        <p class="section-desc">正向依赖为主，显式声明的跨层直接调用（Agent → Infra 直达，跳过中间层）。</p>
+      </div>
+    </div>
+    <table class="dep-table">
+      <thead><tr><th>From</th><th></th><th>To</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td>Interface</td><td class="dep-arrow">↓</td><td>Session</td><td>标准依赖链</td></tr>
+        <tr><td>Session</td><td class="dep-arrow">↓</td><td>Agent</td><td>标准依赖链</td></tr>
+        <tr><td>Agent</td><td class="dep-arrow">↓</td><td>Service</td><td>工具调用</td></tr>
+        <tr><td>Service</td><td class="dep-arrow">↓</td><td>Infrastructure</td><td>工具实现依赖基础能力</td></tr>
+        <tr><td>Agent</td><td class="dep-arrow dep-skip">→</td><td>Infra.ProviderAdapter</td><td>模型调用直达（跨2层）</td></tr>
+        <tr><td>Agent</td><td class="dep-arrow dep-skip">→</td><td>Infra.MemoryStore</td><td>上下文组装（跨2层）</td></tr>
+        <tr><td>Session</td><td class="dep-arrow dep-skip">→</td><td>Infra.SessionStore</td><td>会话持久化（跨2层）</td></tr>
+        <tr><td>Infra.MemoryStore</td><td class="dep-arrow dep-back">←</td><td>Session.ConversationHistory</td><td>反向只读数据流</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- SECTION 5: MEMORY -->
+  <section class="section" id="memory">
+    <div class="section-head">
+      <span class="section-num">05</span>
+      <div>
+        <h2 class="section-title">MemoryStore · 3-Tier</h2>
+        <p class="section-desc">MemoryStore 不持有原始 Message[] 副本，只存储衍生品。ConversationHistory 是唯一数据源。</p>
+      </div>
+    </div>
+    <div class="memory-grid">
+      <div class="memory-card tier-1">
+        <div class="tier-badge">Tier 1</div>
+        <h4>Working Memory</h4>
+        <p>Session.messages.slice(-N) 窗口引用。直接来自 Session，只读访问。</p>
+        <div class="tier-source">↳ Source: Session</div>
+      </div>
+      <div class="memory-card tier-2">
+        <div class="tier-badge">Tier 2</div>
+        <h4>Compressed Memory</h4>
+        <p>CompactionAgent 生成 LLM 摘要。token &gt; 80% 触发，Haiku 模型。失败 3 次后退化为规则截断。</p>
+        <div class="tier-source">↳ Generator: LLM (Haiku)</div>
+      </div>
+      <div class="memory-card tier-3">
+        <div class="tier-badge">Tier 3</div>
+        <h4>Persistent Memory</h4>
+        <p>从 messages 提取关键事实 → ~/.camille/memory/*.md，跨会话持久化。</p>
+        <div class="tier-source">↳ Store: File System</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 6: STORAGE -->
+  <section class="section" id="storage">
+    <div class="section-head">
+      <span class="section-num">06</span>
+      <div>
+        <h2 class="section-title">存储布局</h2>
+        <p class="section-desc">用户级目录布局，JSONL 增量追加写入，JSON 状态快照。</p>
+      </div>
+    </div>
+    <div class="storage-tree">
+      <div class="tree-line"><span class="tree-dir">~/.camille/</span></div>
+      <div class="tree-line">├── config.json</div>
+      <div class="tree-line">├── permissions.json</div>
+      <div class="tree-line">├── hooks.json</div>
+      <div class="tree-line">├── <span class="tree-dir">memory/</span>              <span class="tree-comment">持久记忆</span></div>
+      <div class="tree-line">├── <span class="tree-dir">sessions/</span>            <span class="tree-comment">会话持久化</span></div>
+      <div class="tree-line">│   └── <span class="tree-dir">{sessionId}/</span></div>
+      <div class="tree-line">│       ├── state.json</div>
+      <div class="tree-line">│       ├── messages.jsonl</div>
+      <div class="tree-line">│       └── <span class="tree-dir">checkpoints/</span></div>
+      <div class="tree-line">└── <span class="tree-dir">traces/</span>              <span class="tree-comment">Eval &amp; Tracing</span></div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <span>OpenCamille Architecture · 2025-06-26</span>
+    <span class="footer-ref">Reference: Claude Code · OpenClaw · Codex</span>
+  </footer>
+</main>
+
+<!-- ─── LAYER DETAIL PANEL ──────────────────── -->
+<div class="layer-detail-overlay" id="layerDetailOverlay"></div>
+<aside class="layer-detail-panel" id="layerDetailPanel">
+  <div class="detail-header" id="detailHeader">
+    <div class="header-accent"></div>
+    <h3></h3>
+    <p class="header-role"></p>
+    <button class="detail-close" id="detailClose">✕</button>
+  </div>
+  <div class="detail-body" id="detailBody"></div>
+  <div class="detail-kbd-hint">Esc 关闭</div>
+</aside>
+
+<script src="js/main.js"></script>
+</body>
+</html>
