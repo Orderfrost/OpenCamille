@@ -1,386 +1,453 @@
-# OpenCamille 架构文档
+# OpenCamille Top-Level Architecture
 
-> 状态: 已澄清 | 日期: 2025-06-26
+> Status: accepted draft | Updated: 2026-06-28
 >
-> 本文档记录 OpenCamille Agent Harness 的顶层架构设计。
-> 经验证通过 Claude Code / OpenClaw / Codex 三大参考项目交叉对比。
-> 验证报告见 `docs/research/architecture-verification.md`。
+> This is the complete top-level architecture for OpenCamille. Versioned
+> implementation boundaries live in `docs/scope/` and `docs/spec/`.
 
----
+## Positioning
 
-## 1. 定位
+OpenCamille is an Agent Harness: it provides the runtime, context, tools,
+permissions, lifecycle, recording, and extension boundaries required to run
+agentic workflows.
 
-**OpenCamille = Agent Harness（Agent 运行时框架）**
+OpenCamille v0.1 is not a Claude Code clone and not a vertical product. It is a
+minimal working slice of the harness.
 
-| | Harness（框架） | Agent（实例） |
-|---|---|---|
-| 职责 | 提供 Agent 运行所需的基础设施 | 执行具体任务 |
-| 内容 | 会话管理、工具、权限、记忆、模型适配 | System Prompt、工具集、行为规则 |
+## Layers
 
-**核心抽象**：Harness 是一套基础设施，Agent 是运行其上的能力实体。
-**1 Session = 1 Agent（主 Agent）**，Agent 可 spawn 子 Agent，可切换 Skill 改变能力。
-
----
-
-## 2. 整体分层（5 层 + 横切模块）
-
-```
-1. Interface        用户交互 + 命令路由
-2. Session          会话容器 · 生命周期 · 对话历史 owner
-3. Agent            能力实体 · Agent Loop · Skill 切换 · 子 Agent
-4. Service          工具系统 · 权限引擎 · MCP 接入
-5. Infrastructure   基础能力 · 可替换 · 独立可测
-
-横切模块:
-  Lifecycle   · ContextManager   · SkillLoader
+```text
+1. Surfaces
+2. Runtime Control
+3. Agent Runtime
+4. Services
+5. Infrastructure
 ```
 
-### 依赖规则
+Dependency direction:
 
-- **正向依赖**: Interface → Session → Agent → Service → Infrastructure
-- **跨层依赖**（显式声明）:
-  - Agent → Infra.ProviderAdapter（模型调用直达）
-  - Agent → Infra.MemoryStore（上下文组装）
-  - Session → Infra.SessionStore（会话持久化）
-  - MemoryStore ← Session.ConversationHistory（反向只读数据流）
-- **横切模块**：无层限制
-
----
-
-## 3. 各层设计
-
-### 3.1 Interface 层
-
-**职责**: 用户输入捕获、输出渲染、命令路由。
-
-```
-Interface 层:
-  ├── Input Capture      CLI(stdin) / Web(HTTP)
-  ├── Output Render      TUI(ink) / Web(SSE)
-  ├── CommandRouter      解析 / 前缀 → 路由到 harness / agent / skill
-  └── Multi-Interface    多个界面订阅同一 Session
+```text
+Surfaces
+  -> Runtime Control
+  -> Agent Runtime
+  -> Services
+  -> Infrastructure
 ```
 
-**命令分类**:
+Runtime event flow:
 
-| 类别 | 例子 | 行为 | 入对话历史 |
-|------|------|------|-----------|
-| harness | /exit, /pause, /clear | Interface 直接处理 | 否 |
-| agent | /goal "...", /mode ... | 注入 Agent 对话 | 是 |
-| skill | /code-review | 调用 SkillLoader | 是 |
-
-**Session 访问**: Interface 通过 Infra.SessionRegistry 获取 Session 引用。先单进程内存，预留跨进程。
-
-**数据通道**: Interface ↔ Session 之间是两条独立单向通道：
-
-```
-输入: Interface → Session.handleInput() / session.approve() / session.reject()
-输出: Agent.run() → AsyncGenerator<StreamEvent>（流式文本）
-      Lifecycle.after → 状态通知（所有界面共享）
+```text
+Lifecycle/EventBus
+  -> Surfaces
+  -> Recorder
+  -> Hooks/Plugins
 ```
 
----
+## 1. Surfaces
 
-### 3.2 Session 层
+Surfaces are user or external entry points.
 
-**职责**: 会话容器、对话历史所有者、生命周期管理。
+Top-level:
 
-```
-Session:
-  ├── ConversationHistory  Message[] 唯一所有者
-  ├── Lifecycle State      idle → active → paused → ended
-  ├── Agent Reference      持有当前 Agent 实例引用
-  ├── Agent Swap           运行时替换 Agent（保留对话历史）
-  ├── Skill Loading        加载/卸载 Skill 能力包
-  └── Persistence          触发 Infra.SessionStore（每轮结束追加 JSONL）
+```text
+Surfaces
+  CLI
+  Web later
+  API later
 ```
 
-**状态机（4 状态）**:
+v0.1 implements CLI only.
 
-```
-idle → active → paused → ended
-         ↑         │
-         └─────────┘
-```
+Surfaces handle input, streaming display, approval prompts, and command entry.
+They do not call providers, execute tools, mutate session history, or write run
+records directly.
 
-**Agent 内部等待（阻塞调用，不改变 Session 状态）**:
+## 2. Runtime Control
 
-| 场景 | 机制 |
-|------|------|
-| 权限确认 | `session.waitForApproval(prompt)` 阻塞 Agent Loop → 弹确认 UI → resolve |
-| Agent 问用户 | `session.waitForUserInput(prompt)` 阻塞 → 等输入 |
-| Plan 审阅 | `session.waitForPlanApproval(plan)` 阻塞 → 确认/拒绝 |
+Runtime Control owns live session state and coordinates execution.
 
-**Agent 替换**: Session 可换 Agent 实例（保留对话历史），通过 Skill 切换实现——L1 身份不变，L2 能力变更，保持 Token 缓存命中率。
+Responsibilities:
 
-**对话历史持久化**: 每轮 Agent Loop 结束追加到 Infra.SessionStore（JSONL 文件）。
-
----
-
-### 3.3 Agent 层
-
-**职责**: Agent 实体定义 + Agent Loop 驱动 + 子 Agent 管理 + Skill 切换。
-
-```
-Agent 层:
-
-  ┌── Agent 定义 ─────────────────────────────┐
-  │                                            │
-  │  Agent 实例（创建时传入，运行时可变）:        │
-  │    identity:   { name, systemPrompt }       │
-  │    tools:      Tool[]                       │
-  │    model:      ModelConfig                  │
-  │    rules:      Rule[]                       │
-  │    skills:     Skill[]    （当前激活能力集）  │
-  │    state:      { mode, turns, tokens }      │
-  │                                            │
-  │  AgentFactory: config → Agent 实例          │
-  │                                            │
-  └────────────────────────────────────────────┘
-
-  ┌── Agent 执行 ─────────────────────────────┐
-  │                                            │
-  │  Agent Loop（纯 while 循环）:               │
-  │    每轮:                                    │
-  │      ContextManager.assemble(agent, sess)  │
-  │      → ThinkStep（模型调用）                 │
-  │      → GuardStep（终止检查）                 │
-  │      → ActStep（工具执行，Promise.all）      │
-  │      → ObserveStep（写入 session.messages）  │
-  │      → TerminateStep（判断停止）              │
-  │                                            │
-  │  ThinkStep 细节:                             │
-  │    • 文本 + tool_calls 完整保留到 messages   │
-  │    • thinking 默认折叠，可配置 visible       │
-  │    • 无 tool_calls 时跳过 ActStep            │
-  │                                            │
-  │  GuardStep（精简版）:                        │
-  │    1. finish_reason === "stop" → 正常结束   │
-  │    2. Token/Cost budget 耗尽 → 强制终止     │
-  │    3. ExactRepeat: 同工具+同参数 连续 5 次   │
-  │       → loop detected → 终止               │
-  │                                            │
-  │  ModeSwitcher:                              │
-  │    • default (ReAct)                        │
-  │    • plan-and-solve                         │
-  │      ├── plan-mode: 输出计划，不调工具       │
-  │      ├── Todo 工具: 管理子目标完成状态        │
-  │      ├── approval: auto / user              │
-  │      └── execute: 逐个 Run 子目标到同一       │
-  │          Session.messages                   │
-  │                                            │
-  └────────────────────────────────────────────┘
-
-  ┌── 子 Agent（Hub-and-Spoke）────────────────┐
-  │                                            │
-  │  mainAgent.spawn({                         │
-  │    systemPrompt, tools, model, rules       │
-  │  })                                        │
-  │                                            │
-  │  约束:                                      │
-  │    • 独立 AgentLoop 实例                     │
-  │    • 独立上下文窗口（Context Rot 隔离）        │
-  │    • 不拥�� Task 工具（防深层嵌套）            │
-  │    • 完成后返回摘要到主 Agent                 │
-  │    • 权限 ≤ 主 Agent（bubble 继承）           │
-  │                                            │
-  └────────────────────────────────────────────┘
+```text
+Runtime Control
+  - owns live Session
+  - owns ConversationHistory
+  - owns run status
+  - owns pending approval state
+  - owns budget counters
+  - routes Commands
+  - calls AgentLoop for a turn
+  - handles approval pause/resume
+  - rehydrates live Session from Recorder checkpoint
 ```
 
-**Agent 切换 = Skill 切换**:
+Rules:
 
-```
-L1 基础身份: 始终不变（缓存保留）
-L2 动态能力: SkillLoader.load("code-review") → 注入提示
-L3 记忆: 按需加载
-```
+- Runtime Control is the only writer of live `ConversationHistory`.
+- Agent Runtime returns turn results; it does not mutate the live Session.
+- Recorder records and checkpoints; it does not own live state.
+- ContextManager reads session state; it does not mutate it.
 
-行为由模块交叉决定，支持 Preset 预设：
+v0.1 implementation should keep state in one `Session` object:
 
-```
-Preset "cautious":
-  ├── permission: ask mode
-  ├── mode: plan-and-solve
-  └── prompt tone: 解释每个决策
-```
-
----
-
-### 3.4 Service 层
-
-**职责**: 工具管理与执行、权限控制、外部工具接入。
-
-```
-Service 层:
-
-  ToolRegistry
-    ├── read_file, write_file, shell_exec
-    ├── agent_task (spawn 子 Agent)
-    ├── Todo (plan-and-solve 子目标管理)
-    └── MCP:* (通过 MCPToolAdapter 接入)
-
-  ToolDef: { name, description, inputSchema: ZodType }
-    一个 zod → TS 类型 + LLM JSON Schema + 运行时校验
-    工具执行结果: 纯字符串
-
-  PermissionEngine (Deny-first)
-    ├── deny → ask → allow（顺序匹配）
-    ├── 三级: safe(allow) / write(ask) / dangerous(deny)
-    └── Session 记忆用户选择
-    作为 Lifecycle.tool.pre 的内置 before-handler
+```text
+Session
+  status
+  conversationHistory
+  pendingApproval
+  budget
 ```
 
----
+Do not split `RunState`, `ApprovalState`, and `BudgetState` into separate
+implementation classes in v0.1.
 
-### 3.5 Infrastructure 层
+## 3. Agent Runtime
 
-**职责**: 所有可替换的基础能力。
+Agent Runtime runs the model/tool loop.
 
-```
-Infrastructure:
-
-  Lifecycle             统一生命周期系统（before/after 回调）
-  ProviderAdapter       Anthropic/OpenAI SDK 翻译
-  MemoryStore           3-tier 记忆 + CompactionAgent
-  ConfigLoader          分层配置（主文件 + 独立文件 + env）
-  SessionStore          会话持久化: JSONL(messages) + JSON(state)
-  TraceStore            Span 级 Tracing + Token 计数（OpenTelemetry）
-  MCPClient             MCP 协议传输（stdio/HTTP）
-  SkillLoader           Skill 包加载（Anthropic L1/L2/L3 标准）
-  CommandRegistry       命令定义 + category + availableIn
-  SessionRegistry       Session 查找（内存 + 未来跨进程）
+```text
+Agent Runtime
+  AgentLoop
+  ContextManager
 ```
 
-**MemoryStore（3-tier）**:
+`AgentLoop`:
 
-| 层 | 内容 | 来源 |
-|----|------|------|
-| Working | Session.messages 窗口引用 | Session |
-| Compressed | CompactionAgent 生成摘要 | LLM (haiku) |
-| Persistent | 关键事实 → ~/.opencamille/memory/*.md | 事实提取 |
-
-MemoryStore 不持有原始 Message[] 副本，只存储**衍生品**。
-
----
-
-## 4. 横切模块
-
-### Lifecycle（统一生命周期）
-
-**设计来源**: Claude Code Hooks + OpenClaw Plugin Hooks + OpenCode Events。
-
-单个机制统一了之前的 InterceptorChain + Hook + EventBus。
-
-```
-Lifecycle 节点树:
-  session.*  |  agent.*  |  turn.*  |  tool.*  |  subagent.*  |  memory.*
-
-  before 回调: 可 block · modify · allow
-  after 回调:  只观察 · fire-and-forget
-
-  决策优先级: deny > ask > allow（一个 deny 拒绝所有）
-
-  内置 handler:
-    PermissionEngine → tool.pre（deny/ask/allow）
-    LoopGuard        → tool.pre（重复检测 → deny）
-    TraceStore       → tool.post, turn.end（Span 记录）
+```text
+- calls ContextManager.build()
+- calls ProviderAdapter.stream()
+- emits lifecycle timeline events
+- accumulates model deltas into final assistant messages
+- calls Tools.runToolCall() for tool uses
+- handles approval_required by returning control to Runtime Control
+- handles context_overflow by compacting once and retrying once
+- checks max turns, budget, and abort signal inline
 ```
 
-### ContextManager
+`ContextManager`:
 
-**位置**: Agent 层每轮 Think 前调用，横切聚合。
-
-**职责**: 组装 Prompt，适配不同厂商 API（Anthropic 的 system[] + messages vs OpenAI 的 role:"system" messages）。
-
-```
-输入:
-  ├── Agent 身份定义
-  ├── 规则文件（User/Project，从文件系统读取，优先级: User > Project > Skill > Default）
-  ├── Skill 片段（L1 元数据 → 上下文，L2 body → 身份层）
-  ├── 工具快照（从 Service.ToolRegistry）
-  └── 记忆（从 MemoryStore）
-
-输出: ContextAssembly {
-  system:     string    ← 身份层（Agent identity + L2 Skill + 安全规则）
-  reminders:  string[]  ← 规则层（User/Project rules）
-  tools:      ToolDef[]
-  messages:   Message[]
-}
-
-ProviderAdapter 翻译:
-  Anthropic: system → system[], reminders → messages 的 <system-reminder>
-  OpenAI:    system + reminders → role:"system" message
+```text
+- reads ConversationHistory from Runtime Control
+- reads Memory summaries/persistent memory
+- reads active Skills
+- reads Tools schemas
+- reads MCP metadata exposed by Services
+- builds provider-neutral ContextAssembly
 ```
 
-### SkillLoader
+Do not add these as v0.1 modules:
 
-**位置**: Infrastructure 层，横跨 Service + Agent。严格遵循 Anthropic Skill 标准。
-
-```
-Skill 结构:
-  skill-name/
-  ├── SKILL.md            # YAML frontmatter + Markdown body
-  ├── scripts/            # 可执行脚本
-  ├── references/         # 参考文档（按需加载）
-  └── assets/             # 输出资源
-
-三层渐进式加载:
-  L1: name + description — 会话启动始终加载 (~100 tokens/skill)
-  L2: SKILL.md body — 触发时加载 (<500 行)
-  L3: references/ — Agent 按需 read_file
+```text
+ToolExecutor
+ExecutionStrategy
+TerminationGuard
+AgentRuntimeEvent
+ToolCallCoordinator
+ContextPipeline
+StateMachineEngine
 ```
 
----
+## 4. Services
 
-## 5. 数据流
+Services contain harness capabilities above raw infrastructure.
 
-### 主数据流（同步）
+```text
+Services
+  Agent Services
+    Tools
+    Skills
+    Memory
+    MCP
+    Subagents later
 
-```
-Interface → Session.handleInput()
-  → Agent.run(input, sessionCtx)
-    → ContextManager.assemble()
-    → ThinkStep → Infra.ProviderAdapter.chat()
-        → StreamEvent → Interface 实时渲染
-    → GuardStep → 终止检查
-    → ActStep → Lifecycle.before(tool.pre) → Tool.execute()
-    → ObserveStep → Session.messages.append()
-    → TerminateStep → done?
-```
-
-### 通知流（异步 — Lifecycle after 回调）
-
-```
-Lifecycle.after 消费者:
-  TraceStore  ← tool.post, turn.end（Span 记录）
-  TUI panels  ← turn.end（界面刷新）
-  Hook 脚本   ← turn.end, session.end（自定义逻辑）
-  Plugin      ← 任意节点（扩展功能）
+  Runtime Services
+    Lifecycle
+    Hooks
+    Plugins
+    Recorder
 ```
 
----
+### Tools
 
-## 6. 存储布局
+`Tools` owns the tool system.
 
-```
-~/.camille/
-  ├── config.json
-  ├── permissions.json
-  ├── hooks.json
-  ├── memory/              # 持久记忆
-  ├── sessions/            # 会话持久化
-  │   └── {sessionId}/
-  │       ├── state.json
-  │       ├── messages.jsonl
-  │       └── checkpoints/
-  └── traces/              # Eval 链路
+```text
+Tools
+  - register tools
+  - list tool schemas
+  - resolve tool names
+  - runToolCall()
 ```
 
----
+`runToolCall()` may validate arguments, ask `PermissionEngine`, execute the
+callable, normalize/redact results, and return one of:
 
-## 7. 参考项目
+```text
+ok
+error
+approval_required
+```
 
-- **Claude Code**: queryLoop、deny-first 权限、hub-and-spoke 子 Agent、CLAUDE.md、Skills
-- **OpenClaw**: Plan-Review-Execute 三阶段、Session 状态机、goal-task 循环
-- **Codex/Cursor**: shell-centric 工具哲学、推理链保留
-- **OpenCode**: PRUNE 双阈值、Compaction Agent、Plugin SDK
+`Tools` must not mutate `ConversationHistory`, wait for user approval, call the
+LLM, or write Recorder files directly.
+
+### Skills
+
+Skills follow the Anthropic Agent Skills specification.
+
+```text
+skill-name/
+  SKILL.md
+  scripts/ later
+  references/ later
+  assets/ later
+```
+
+OpenCamille maintains a `SkillIndex` from `SKILL.md` metadata and registers a
+built-in `Skill` tool through `Tools`. The `Skill` tool activates a skill and
+loads its body into context.
+
+v0.1 supports progressive loading at metadata/body level and defers dynamic
+command injection, forked subagents, skill-scoped hooks, live file watching, and
+nested monorepo discovery.
+
+### Memory
+
+Memory manages context material derived from or outside current conversation
+history.
+
+v0.1:
+
+```text
+Memory
+  SessionSummary
+  PersistentMemory
+```
+
+No `WorkingNotes`, RAG, vector database, retrieved memory, automatic fact
+extraction, or cross-project autonomous learning in v0.1.
+
+### MCP
+
+MCP follows the official Model Context Protocol.
+
+```text
+Agent Services / MCP
+  - adapts MCP tools into Tools
+  - exposes resources/prompts later
+
+Infrastructure / MCPClient
+  - stdio JSON-RPC
+  - listTools
+  - callTool
+```
+
+v0.1 supports stdio MCP tools only.
+
+### Lifecycle
+
+Lifecycle defines the stable run timeline and hook point names. It owns the
+in-process EventBus.
+
+Run timeline:
+
+```text
+session_created
+session_resumed
+session_closed
+
+run_started
+turn_started
+context_built
+context_overflow
+model_started
+model_delta
+model_finished
+model_failed
+tool_requested
+approval_requested
+approval_resolved
+tool_started
+tool_finished
+tool_failed
+tool_denied
+compaction_started
+compaction_finished
+compaction_failed
+checkpoint_started
+checkpoint_finished
+checkpoint_failed
+turn_finished
+turn_failed
+run_finished
+run_failed
+run_cancelled
+```
+
+Only AgentLoop and Runtime Control emit lifecycle events.
+
+### Hooks
+
+Hooks run callbacks at fixed hook points. They are not just EventBus
+subscribers, because some hook points can block or modify flow.
+
+Hook points:
+
+```text
+session_start
+session_resume
+session_stop
+before_user_message
+after_user_message
+before_context_build
+after_context_build
+before_model_call
+after_model_call
+before_tool_call
+after_tool_call
+before_permission_request
+after_permission_resolved
+before_compaction
+after_compaction
+before_checkpoint
+after_checkpoint
+before_message_display
+```
+
+v0.1 places all hook points but keeps most observe-only. `before_tool_call` may
+deny/modify args, `after_tool_call` may modify result, `before_user_message` may
+deny/modify text, and `before_message_display` may modify display only.
+
+### Plugins
+
+Plugins are a top-level extension concept, but v0.1 does not implement a full
+plugin package format.
+
+v0.1 may allow local config to register hooks, tools, or skills. No marketplace,
+remote install, dependency solver, or plugin sandbox.
+
+### Recorder
+
+Recorder persists run evidence and recovery material.
+
+```text
+.opencamille/runs/<runId>/
+  events.jsonl
+  transcript.jsonl
+  checkpoint.json
+```
+
+Semantics:
+
+```text
+events.jsonl      = timeline truth for eval, replay, and debug
+transcript.jsonl  = readable conversation index for UI/export/demo
+checkpoint.json   = resume source
+```
+
+Resume reads checkpoint. Replay reads events. Eval reads events first and may
+also use transcript and workspace artifacts.
+
+Recorder subscribes to EventBus. It does not execute hooks, mutate live Session,
+or restore state by event sourcing.
+
+## 5. Infrastructure
+
+Infrastructure contains low-level adapters and safety boundaries.
+
+```text
+Infrastructure
+  ProviderAdapter
+  Config
+  PermissionEngine
+  MCPClient
+  CommandRunner
+  WorkspacePath
+```
+
+`ProviderAdapter`:
+
+```text
+- accepts ContextAssembly
+- calls provider SDK/API
+- returns provider-neutral stream items:
+  model_delta
+  tool_use
+  final_message
+  usage
+  error
+```
+
+`Config`:
+
+```text
+- loads env and config files
+- defines provider/model/MCP/permission defaults
+- enforces precedence
+- never writes secrets into Recorder
+```
+
+Recommended precedence, low to high:
+
+```text
+built-in defaults
+  -> env
+  -> user config
+  -> project config
+  -> CLI flags
+```
+
+`PermissionEngine` returns only:
+
+```text
+allow | ask | deny
+```
+
+It does not wait for users and does not own approval state.
+
+`CommandRunner` is a small `runCommand()` capability for timeout, abort signal,
+stdout/stderr limits, and exit code normalization.
+
+`WorkspacePath` is a small `resolveWorkspacePath()` capability for path boundary
+checks.
+
+Do not add these as v0.1 modules:
+
+```text
+FileSystem
+Shell class
+Storage abstraction
+Sandbox abstraction
+ProviderFactory
+PolicyStore
+SecretsManager
+NetworkClient
+```
+
+Use Node standard library directly unless a safety boundary requires one small
+function.
+
+## Critical Contracts
+
+These contracts are required for v0.1:
+
+```text
+Approval resume:
+  Tools.runToolCall() returns approval_required.
+  Runtime Control pauses and later resumes the same tool call.
+
+Provider streaming:
+  ProviderAdapter hides vendor-specific stream formats.
+
+Tool result normalization/redaction:
+  Tool output is normalized and redacted before entering model context,
+  Transcript, or Events.
+
+Context overflow:
+  ContextManager reports overflow.
+  AgentLoop calls Memory.compact() once and retries once.
+
+Config and secrets:
+  Config precedence is deterministic.
+  Secrets are never recorded.
+```

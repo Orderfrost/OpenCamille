@@ -8,16 +8,18 @@ OpenCamille.
 OpenCamille is an Agent Harness. Do not collapse it into a single vertical
 assistant or a Claude Code clone.
 
-The current source of truth for scope is [v0.1 Scope](./scope/v0.1.md).
+The complete architecture source of truth is [Architecture](./architecture.md).
+The current implementation boundary is [v0.1 Scope](./scope/v0.1.md).
 
 ## Required Reading Order
 
 Before implementation work:
 
-1. [v0.1 Scope](./scope/v0.1.md)
-2. [Architecture](./architecture.md)
-3. [Architecture Verification](./research/architecture-verification.md)
-4. The specific module document under `docs/architecture/` for the code being
+1. [Architecture](./architecture.md)
+2. [v0.1 Scope](./scope/v0.1.md)
+3. [v0.1 Architecture Spec](./spec/v0.1-architecture.md)
+4. [Architecture Verification](./research/architecture-verification.md)
+5. The specific module document under `docs/architecture/` for the code being
    changed.
 
 Before changing documentation:
@@ -43,6 +45,15 @@ Before changing documentation:
 
 - The harness owns runtime infrastructure; an agent is one configured runtime
   entity inside the harness.
+- If historical development logs or research notes conflict with the current
+  architecture, follow `docs/architecture.md`, `docs/scope/`, and `docs/spec/`.
+- Top-level architecture is the complete target architecture. Do not simplify it
+  just because a version scope implements only part of it.
+- Version scopes and specs must live under `docs/scope/` and `docs/spec/`; they
+  must not overwrite the complete architecture.
+- Do not change module boundaries, layer structure, or core architecture
+  responsibilities without first grilling the project owner and getting explicit
+  approval.
 - Keep provider-specific details behind `ProviderAdapter`.
 - Keep tool validation at the tool boundary.
 - Permission checks happen before side-effecting tool execution.
@@ -54,9 +65,10 @@ Before changing documentation:
 ## Documentation Rules
 
 - `docs/README.md` is the index.
+- `docs/architecture.md` explains the complete accepted architecture.
+- `docs/architecture/` contains complete module-level architecture notes.
 - `docs/scope/` defines version boundaries and priorities.
-- `docs/architecture.md` explains accepted architecture.
-- `docs/architecture/` contains module-level design.
+- `docs/spec/` defines versioned implementation targets.
 - `docs/research/` contains evidence and investigation, not automatically
   accepted requirements.
 - `docs/adr/` records hard-to-reverse decisions.
@@ -72,4 +84,3 @@ A change is done only when:
 - Relevant tests or checks were run.
 - Docs were updated if behavior, architecture, or scope changed.
 - Any skipped work is named explicitly.
-
