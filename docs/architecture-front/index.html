@@ -7,36 +7,815 @@
     <link rel="stylesheet" href="./css/style.css" />
   </head>
   <body>
-    <main class="shell">
+    <div class="progress-bar" aria-hidden="true"></div>
+
+    <button class="mobile-nav-toggle" type="button" aria-label="打开导航" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+
+    <aside class="sidebar" aria-label="架构导航">
+      <a class="sidebar-logo" href="#top">
+        <span class="logo-mark">OC</span>
+        <span>
+          <span class="logo-text">OpenCamille</span>
+          <span class="logo-badge">2026-06-29</span>
+        </span>
+      </a>
+
+      <nav class="nav-list">
+        <a class="nav-item" href="#map"><span>01</span>总览图</a>
+        <a class="nav-item" href="#flow"><span>02</span>运行流</a>
+        <a class="nav-item" href="#principles"><span>03</span>架构原则</a>
+        <a class="nav-item" href="#contracts"><span>04</span>关键契约</a>
+        <a class="nav-item" href="#modules"><span>05</span>模块细节</a>
+        <a class="nav-item" href="#protocols"><span>06</span>协议与类型</a>
+        <a class="nav-item" href="#slice"><span>07</span>v0.1 边界</a>
+        <a class="nav-item" href="#roadmap"><span>08</span>实现路径</a>
+        <a class="nav-item" href="#sources"><span>09</span>文档来源</a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="theme-toggle" type="button" aria-label="切换主题">◐</button>
+        <a href="../architecture.md">architecture.md</a>
+      </div>
+    </aside>
+
+    <main class="main" id="top">
       <section class="hero">
-        <p class="eyebrow">OpenCamille</p>
-        <h1>Agent Harness Architecture</h1>
-        <p class="hero-copy">
-          当前展示页已清理旧架构内容。权威架构请阅读 Markdown 文档；后续展示界面
-          应基于新版五层架构重新设计。
-        </p>
+        <div class="hero-text">
+          <p class="hero-eyebrow">Agent Harness / 已确认草案</p>
+          <h1 class="hero-title">OpenCamille 新版完整架构图</h1>
+          <p class="hero-desc">
+            当前架构把 OpenCamille 定位为 Agent Harness：负责运行时、上下文、工具、权限、生命周期、记录与扩展边界。
+            目标不是复刻某个垂直助手，而是证明一个可控、可扩展、可审计的 Agent Runtime 能从底层跑通。
+          </p>
+          <ul class="hero-tags" aria-label="架构关键词">
+            <li class="tag tag-layers">五层依赖</li>
+            <li class="tag tag-cross">生命周期</li>
+            <li class="tag tag-memory">Recorder</li>
+            <li class="tag tag-agents">Skills / MCP</li>
+          </ul>
+        </div>
+
+        <div class="hero-visual" role="img" aria-label="五层架构缩略图">
+          <div class="mini-layer l1">Surfaces</div>
+          <div class="mini-layer l2">Runtime Control</div>
+          <div class="mini-layer l3">Agent Runtime</div>
+          <div class="mini-layer l4">Services</div>
+          <div class="mini-layer l5">Infrastructure</div>
+        </div>
       </section>
 
-      <section class="card-grid">
-        <article class="card">
-          <h2>Top-Level Architecture</h2>
-          <p>Surfaces / Runtime Control / Agent Runtime / Services / Infrastructure。</p>
-          <a href="../architecture.md">Open architecture.md</a>
-        </article>
+      <section class="section" id="map">
+        <header class="section-head">
+          <span class="section-num">01</span>
+          <div>
+            <h2 class="section-title">五层架构地图</h2>
+            <p class="section-desc">
+              依赖方向固定向下：Surfaces -> Runtime Control -> Agent Runtime -> Services -> Infrastructure。
+              Runtime Control 是 live Session 和 ConversationHistory 的所有者。
+            </p>
+          </div>
+        </header>
 
-        <article class="card">
-          <h2>v0.1 Scope</h2>
-          <p>CLI only, single-agent, stdio MCP tools, recorder, skills, minimal hooks。</p>
-          <a href="../scope/v0.1.md">Open v0.1 scope</a>
-        </article>
+        <div class="diagram-embed">
+          <div class="diagram-embed-head">
+            <h3>完整 HTML+SVG 架构图</h3>
+            <a href="./architecture-diagram.html">单独打开 / 导出</a>
+          </div>
+          <iframe src="./architecture-diagram.html" title="OpenCamille HTML SVG architecture diagram"></iframe>
+        </div>
 
-        <article class="card">
-          <h2>v0.1 Spec</h2>
-          <p>Implementation target for the first working harness slice。</p>
-          <a href="../spec/v0.1-architecture.md">Open v0.1 spec</a>
-        </article>
+        <ol class="layer-diagram" aria-label="OpenCamille architecture layers">
+          <li class="layer-row" data-layer="surfaces" style="--accent: var(--blue)">
+            <div class="layer-gutter">
+              <span class="layer-idx">L1</span>
+              <h3 class="layer-name">Surfaces</h3>
+              <p class="layer-role">入口与展示，不执行业务能力</p>
+            </div>
+            <div class="layer-modules">
+              <span class="mod-chip">CLI <small>v0.1</small></span>
+              <span class="mod-chip">Web <small>延后</small></span>
+              <span class="mod-chip">API <small>延后</small></span>
+            </div>
+            <button class="layer-expand" type="button" aria-label="查看 Surfaces 详情">›</button>
+          </li>
+
+          <li class="layer-row" data-layer="runtime" style="--accent: var(--cyan)">
+            <div class="layer-gutter">
+              <span class="layer-idx">L2</span>
+              <h3 class="layer-name">Runtime Control <span class="core-badge">状态所有者</span></h3>
+              <p class="layer-role">协调会话、命令、审批与预算</p>
+            </div>
+            <div class="layer-modules">
+              <span class="mod-chip">Session</span>
+              <span class="mod-chip">ConversationHistory</span>
+              <span class="mod-chip">CommandDispatcher</span>
+              <span class="mod-chip">审批暂停/恢复</span>
+              <span class="mod-chip">预算 / 状态字段</span>
+            </div>
+            <button class="layer-expand" type="button" aria-label="查看 Runtime Control 详情">›</button>
+          </li>
+
+          <li class="layer-row" data-layer="agent" style="--accent: var(--amber)">
+            <div class="layer-gutter">
+              <span class="layer-idx">L3</span>
+              <h3 class="layer-name">Agent Runtime</h3>
+              <p class="layer-role">模型和工具循环</p>
+            </div>
+            <div class="layer-modules">
+              <span class="mod-chip">AgentLoop</span>
+              <span class="mod-chip">ContextManager</span>
+              <span class="mod-chip flow-chip"><span class="flow-dot"></span>上下文溢出后只重试一次</span>
+            </div>
+            <button class="layer-expand" type="button" aria-label="查看 Agent Runtime 详情">›</button>
+          </li>
+
+          <li class="layer-row" data-layer="services" style="--accent: var(--rose)">
+            <div class="layer-gutter">
+              <span class="layer-idx">L4</span>
+              <h3 class="layer-name">Services</h3>
+              <p class="layer-role">Harness 能力层</p>
+            </div>
+            <div class="layer-modules">
+              <span class="mod-chip">Tools</span>
+              <span class="mod-chip">Skills</span>
+              <span class="mod-chip">Memory</span>
+              <span class="mod-chip">MCP</span>
+              <span class="mod-chip">Lifecycle</span>
+              <span class="mod-chip">Hooks</span>
+              <span class="mod-chip">Plugins</span>
+              <span class="mod-chip">Recorder</span>
+              <span class="mod-chip">Subagents <small>延后</small></span>
+            </div>
+            <button class="layer-expand" type="button" aria-label="查看 Services 详情">›</button>
+          </li>
+
+          <li class="layer-row" data-layer="infra" style="--accent: var(--purple)">
+            <div class="layer-gutter">
+              <span class="layer-idx">L5</span>
+              <h3 class="layer-name">Infrastructure</h3>
+              <p class="layer-role">底层适配器与安全边界</p>
+            </div>
+            <div class="layer-modules">
+              <span class="mod-chip">ProviderAdapter</span>
+              <span class="mod-chip">Config</span>
+              <span class="mod-chip">PermissionEngine</span>
+              <span class="mod-chip">MCPClient</span>
+              <span class="mod-chip">CommandRunner</span>
+              <span class="mod-chip">WorkspacePath</span>
+            </div>
+            <button class="layer-expand" type="button" aria-label="查看 Infrastructure 详情">›</button>
+          </li>
+        </ol>
       </section>
+
+      <section class="section" id="flow">
+        <header class="section-head">
+          <span class="section-num">02</span>
+          <div>
+            <h2 class="section-title">数据流与事件流</h2>
+            <p class="section-desc">
+              数据流由 Runtime Control 收口；事件流由 Lifecycle/EventBus 广播给界面、Recorder 和扩展点。
+            </p>
+          </div>
+        </header>
+
+        <div class="flow-block">
+          <h3 class="flow-label sync-label">Turn data flow</h3>
+          <div class="flow-row" role="img" aria-label="turn data flow">
+            <span class="flow-node fn-hl">CLI</span><span class="fn-arrow">→</span>
+            <span class="flow-node fn-hl">Runtime Control<br /><small>CommandDispatcher</small></span><span class="fn-arrow">→</span>
+            <span class="flow-node">ConversationHistory<br /><small>append</small></span><span class="fn-arrow">→</span>
+            <span class="flow-node">AgentLoop.runTurn</span><span class="fn-arrow">→</span>
+            <span class="flow-node">ContextManager.build</span><span class="fn-arrow">→</span>
+            <span class="flow-node">ProviderAdapter.stream</span><span class="fn-arrow">→</span>
+            <span class="flow-node">Tools.runToolCall</span><span class="fn-arrow">→</span>
+            <span class="flow-node fn-hl">Runtime Control<br /><small>append final messages</small></span>
+          </div>
+        </div>
+
+        <div class="flow-block">
+          <h3 class="flow-label async-label">Runtime event flow</h3>
+          <div class="event-grid">
+            <article class="event-card">
+              <p class="event-layer">Emitters</p>
+              <p class="event-name">Runtime Control</p>
+              <p class="event-name">AgentLoop</p>
+            </article>
+            <article class="event-card">
+              <p class="event-layer">Lifecycle</p>
+              <p class="event-name">emit(event)</p>
+              <p class="event-name">EventBus</p>
+            </article>
+            <article class="event-card">
+              <p class="event-layer">Consumers</p>
+              <p class="event-name">Surfaces streaming</p>
+              <p class="event-name">Recorder events</p>
+            </article>
+            <article class="event-card">
+              <p class="event-layer">Extensions</p>
+              <p class="event-name">Hooks observe/modify</p>
+              <p class="event-name">Plugins local config</p>
+            </article>
+          </div>
+          <p class="flow-consumers">Only AgentLoop and Runtime Control emit lifecycle events. Other modules return results.</p>
+        </div>
+      </section>
+
+      <section class="section" id="principles">
+        <header class="section-head">
+          <span class="section-num">03</span>
+          <div>
+            <h2 class="section-title">架构原则与取舍</h2>
+            <p class="section-desc">
+              最新文档把“为什么这样设计”写清楚了：先证明 Harness 底座，避免空壳模块，把状态、事件、权限和持久化边界固定下来。
+            </p>
+          </div>
+        </header>
+
+        <div class="principle-grid">
+          <article class="principle-card">
+            <p class="principle-index">P1</p>
+            <h3>状态写入集中</h3>
+            <p>live Session 和 ConversationHistory 只能由 Runtime Control 写入，避免 CLI、Tools、Recorder、AgentLoop 分散改状态。</p>
+          </article>
+          <article class="principle-card">
+            <p class="principle-index">P2</p>
+            <h3>执行循环收敛</h3>
+            <p>Agent Runtime 只保留 AgentLoop 和 ContextManager。ToolExecutor、ExecutionStrategy 等等到真实复杂度出现后再拆。</p>
+          </article>
+          <article class="principle-card">
+            <p class="principle-index">P3</p>
+            <h3>能力放 Services</h3>
+            <p>Tools、Skills、Memory、MCP 是 Agent 能力；Lifecycle、Hooks、Plugins、Recorder 是运行时服务。</p>
+          </article>
+          <article class="principle-card">
+            <p class="principle-index">P4</p>
+            <h3>底层边界放 Infrastructure</h3>
+            <p>Provider、Config、Permission、MCP transport、命令执行、路径边界放在底层，隔离外部系统差异和副作用风险。</p>
+          </article>
+          <article class="principle-card">
+            <p class="principle-index">P5</p>
+            <h3>事件用于观察</h3>
+            <p>EventBus 服务 streaming、recording、hooks 和 replay timeline，但不替代状态源；resume 只读 checkpoint。</p>
+          </article>
+          <article class="principle-card">
+            <p class="principle-index">P6</p>
+            <h3>v0.1 不做空壳框架</h3>
+            <p>少文件、少抽象、职责清晰、边界强约束。每个非平凡逻辑都要留下最小可运行验证。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="contracts">
+        <header class="section-head">
+          <span class="section-num">04</span>
+          <div>
+            <h2 class="section-title">关键契约</h2>
+            <p class="section-desc">这些是 v0.1 不能打破的架构边界，也是面试展示时最能说明工程判断的部分。</p>
+          </div>
+        </header>
+
+        <div class="cross-grid">
+          <article class="cross-card">
+            <h3>Approval resume</h3>
+            <p>Tools 返回 approval_required，AgentLoop 交回控制权，Runtime Control 暂停并恢复同一个 tool call。</p>
+            <p class="cross-spans">Tools -> AgentLoop -> Runtime Control -> Surface</p>
+          </article>
+          <article class="cross-card">
+            <h3>Provider streaming</h3>
+            <p>ProviderAdapter 接收厂商无关 ContextAssembly，输出厂商无关 stream items，SDK 形状不泄漏到 Agent Runtime。</p>
+            <p class="cross-spans">ContextAssembly -> ProviderStreamItem</p>
+          </article>
+          <article class="cross-card">
+            <h3>Tool result hygiene</h3>
+            <p>工具输出在进入模型上下文、Transcript 或 Events 之前统一 normalize、truncate、redact。</p>
+            <p class="cross-spans">validation / permission / redaction</p>
+          </article>
+          <article class="cross-card">
+            <h3>Context overflow</h3>
+            <p>ContextManager 报 overflow；AgentLoop 只调用 Memory.compact() 一次并重试一次，不静默截断。</p>
+            <p class="cross-spans">overflow -> compact once -> rebuild once</p>
+          </article>
+          <article class="cross-card">
+            <h3>Recorder semantics</h3>
+            <p>events.jsonl 是机器读 timeline truth；transcript.jsonl 是人读会话记录；checkpoint.json 是 resume source。</p>
+            <p class="cross-spans">.opencamille/runs/&lt;runId&gt;/</p>
+          </article>
+          <article class="cross-card">
+            <h3>Secrets boundary</h3>
+            <p>Config 有确定优先级，secret 值不能写入事件、转录、checkpoint 或工具记录。</p>
+            <p class="cross-spans">defaults -> env -> user -> project -> CLI</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="modules">
+        <header class="section-head">
+          <span class="section-num">05</span>
+          <div>
+            <h2 class="section-title">模块责任矩阵</h2>
+            <p class="section-desc">
+              这一段把五层图拆成可实现模块。重点不是文件数量，而是谁拥有状态、谁只返回结果、谁负责安全边界。
+            </p>
+          </div>
+        </header>
+
+        <div class="module-matrix">
+          <article class="module-card layer-surface">
+            <p class="module-kicker">Surface</p>
+            <h3>CLI</h3>
+            <dl>
+              <div><dt>输入</dt><dd>用户文本、命令、flags、审批选择</dd></div>
+              <div><dt>存在原因</dt><dd>把交互方式和 Agent 运行逻辑拆开，避免后续 Web/API 重复业务逻辑</dd></div>
+              <div><dt>输出</dt><dd>流式事件展示、审批提示、最终消息</dd></div>
+              <div><dt>禁止</dt><dd>不调用 provider、不执行 tool、不写 Recorder</dd></div>
+            </dl>
+          </article>
+
+          <article class="module-card layer-runtime">
+            <p class="module-kicker">Runtime Control</p>
+            <h3>Session</h3>
+            <dl>
+              <div><dt>拥有</dt><dd>sessionId、runId、status、conversationHistory、pendingApproval、budget、sessionSummary</dd></div>
+              <div><dt>存在原因</dt><dd>把 live state 的写入权收敛到一个地方，保证 approval、resume、debug 可控</dd></div>
+              <div><dt>状态</dt><dd>idle / running / waiting_approval / paused / finished / failed / cancelled</dd></div>
+              <div><dt>规则</dt><dd>v0.1 不拆 RunState、ApprovalState、BudgetState</dd></div>
+            </dl>
+          </article>
+
+          <article class="module-card layer-runtime">
+            <p class="module-kicker">Runtime Control</p>
+            <h3>CommandDispatcher</h3>
+            <dl>
+              <div><dt>职责</dt><dd>接收 Surface 命令，决定是用户消息、控制命令还是恢复审批</dd></div>
+              <div><dt>位置</dt><dd>属于 Runtime Control，不放进 Agent Services</dd></div>
+              <div><dt>写入</dt><dd>只通过 Runtime Control 追加 ConversationHistory</dd></div>
+              <div><dt>边界</dt><dd>不做模型调用，不做工具执行</dd></div>
+            </dl>
+          </article>
+
+          <article class="module-card layer-agent">
+            <p class="module-kicker">Agent Runtime</p>
+            <h3>AgentLoop</h3>
+            <dl>
+              <div><dt>循环</dt><dd>build context -> stream model -> collect tool_use/final message -> run tool or finish</dd></div>
+              <div><dt>存在原因</dt><dd>Agent Harness 的核心循环必须集中，否则 streaming、tool use、approval、compaction 会分散</dd></div>
+              <div><dt>守卫</dt><dd>max turns、budget、abort signal inline 检查</dd></div>
+              <div><dt>事件</dt><dd>只发 turn/model/tool/compaction 生命周期事件</dd></div>
+            </dl>
+          </article>
+
+          <article class="module-card layer-agent">
+            <p class="module-kicker">Agent Runtime</p>
+            <h3>ContextManager</h3>
+            <dl>
+              <div><dt>读取</dt><dd>ConversationHistory、Memory、active skill、tool schemas、MCP metadata</dd></div>
+              <div><dt>存在原因</dt><dd>统一组装厂商无关上下文，避免 provider 细节和记忆/技能注入散落到各层</dd></div>
+              <div><dt>输出</dt><dd>厂商无关 ContextAssembly: system / tools / messages</dd></div>
+              <div><dt>溢出</dt><dd>返回 context_overflow，不在内部静默截断</dd></div>
+            </dl>
+          </article>
+
+          <article class="module-card layer-services">
+            <p class="module-kicker">Agent Services</p>
+            <h3>Tools</h3>
+            <dl>
+              <div><dt>入口</dt><dd>register、list schemas、resolve、runToolCall</dd></div>
+              <div><dt>存在原因</dt><dd>统一内置 tools、Skill tool、MCP tools 的 schema、解析、权限和执行入口</dd></div>
+              <div><dt>路径</dt><dd>zod validation -> PermissionEngine -> callable -> normalize/truncate/redact</dd></div>
+              <div><dt>返回</dt><dd>ok / error / approval_required</dd></div>
+            </dl>
+          </article>
+
+          <article class="module-card layer-services">
+            <p class="module-kicker">Agent Services</p>
+            <h3>Skills</h3>
+            <dl>
+              <div><dt>格式</dt><dd>skill-name/SKILL.md，frontmatter 包含 name 和 description</dd></div>
+              <div><dt>存在原因</dt><dd>把任务知识包渐进式加载进上下文，避免所有任务说明常驻 base prompt</dd></div>
+              <div><dt>机制</dt><dd>SkillIndex 记录元数据，built-in Skill tool 激活 body</dd></div>
+              <div><dt>暂缓</dt><dd>dynamic command injection、forked subagents、live watching</dd></div>
+            </dl>
+          </article>
+
+          <article class="module-card layer-services">
+            <p class="module-kicker">Agent Services</p>
+            <h3>MCP</h3>
+            <dl>
+              <div><dt>v0.1</dt><dd>stdio JSON-RPC、listTools、callTool</dd></div>
+              <div><dt>存在原因</dt><dd>遵循官方 MCP 接入外部工具生态，同时让外部工具走统一权限与记录路径</dd></div>
+              <div><dt>集成</dt><dd>MCP tools 适配进 Tools，共用 validation、permission、recording path</dd></div>
+              <div><dt>不做</dt><dd>HTTP transport、auth、resources、prompts、sampling、hot reload</dd></div>
+            </dl>
+          </article>
+
+          <article class="module-card layer-services">
+            <p class="module-kicker">Runtime Services</p>
+            <h3>Lifecycle / Hooks</h3>
+            <dl>
+              <div><dt>Lifecycle</dt><dd>事件名和 in-process EventBus 的唯一来源</dd></div>
+              <div><dt>存在原因</dt><dd>为 streaming UI、Recorder、Hooks、Replay、外部 Eval 提供统一时间线</dd></div>
+              <div><dt>Hooks</dt><dd>固定 hook points；能阻塞/修改的 hook 不等同于 EventBus subscriber</dd></div>
+              <div><dt>Emitter</dt><dd>只有 AgentLoop 和 Runtime Control 发 lifecycle events</dd></div>
+            </dl>
+          </article>
+
+          <article class="module-card layer-services">
+            <p class="module-kicker">Runtime Services</p>
+            <h3>Recorder</h3>
+            <dl>
+              <div><dt>events.jsonl</dt><dd>timeline truth，用于 eval / replay / debug</dd></div>
+              <div><dt>存在原因</dt><dd>Recorder 不只是 Tracer，还要提供 transcript、checkpoint、resume 和外部 eval 证据</dd></div>
+              <div><dt>transcript.jsonl</dt><dd>可读会话索引，用于 UI / export / demo</dd></div>
+              <div><dt>checkpoint.json</dt><dd>resume source；v0.1 不用 event sourcing 恢复</dd></div>
+            </dl>
+          </article>
+
+          <article class="module-card layer-infra">
+            <p class="module-kicker">Infrastructure</p>
+            <h3>ProviderAdapter</h3>
+            <dl>
+              <div><dt>输入</dt><dd>ContextAssembly</dd></div>
+              <div><dt>存在原因</dt><dd>隔离不同 LLM API 的 system/tools/messages、stream、tool_use、usage、error 差异</dd></div>
+              <div><dt>输出</dt><dd>model_delta / tool_use / final_message / usage / error</dd></div>
+              <div><dt>测试</dt><dd>一个真实 provider + 一个 fake provider 支撑确定性单测</dd></div>
+            </dl>
+          </article>
+
+          <article class="module-card layer-infra">
+            <p class="module-kicker">Infrastructure</p>
+            <h3>Permission / Command / Workspace</h3>
+            <dl>
+              <div><dt>PermissionEngine</dt><dd>只返回 allow / ask / deny；不等待用户，不存审批状态</dd></div>
+              <div><dt>存在原因</dt><dd>side-effect tool 执行前统一判断权限，避免 write/shell/MCP 各自实现安全策略</dd></div>
+              <div><dt>CommandRunner</dt><dd>timeout、abort signal、stdout/stderr limit、exit code normalization</dd></div>
+              <div><dt>WorkspacePath</dt><dd>resolveWorkspacePath 做 workspace path boundary checks</dd></div>
+            </dl>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="protocols">
+        <header class="section-head">
+          <span class="section-num">06</span>
+          <div>
+            <h2 class="section-title">协议、类型与运行细节</h2>
+            <p class="section-desc">
+              这里展示实现时要稳定下来的协议形状。面试时可以用它说明：架构不是画层，而是定义跨模块的合同。
+            </p>
+          </div>
+        </header>
+
+        <div class="protocol-grid">
+          <article class="protocol-card">
+            <p class="protocol-name">Session</p>
+            <pre><code>sessionId
+runId
+status
+conversationHistory
+pendingApproval?
+budget
+sessionSummary?</code></pre>
+            <p>Runtime Control 唯一写入 conversationHistory，checkpoint 恢复 live Session。</p>
+          </article>
+
+          <article class="protocol-card">
+            <p class="protocol-name">ContextAssembly</p>
+            <pre><code>system
+tools
+messages</code></pre>
+            <p>ContextManager 汇总 rules、skills、memory、tool schemas 和最近消息，输出厂商无关 context。</p>
+          </article>
+
+          <article class="protocol-card">
+            <p class="protocol-name">ProviderStreamItem</p>
+            <pre><code>model_delta
+tool_use
+final_message
+usage
+error</code></pre>
+            <p>ProviderAdapter 屏蔽 Anthropic/OpenAI 等 SDK 差异，AgentLoop 只处理统一流项。</p>
+          </article>
+
+          <article class="protocol-card">
+            <p class="protocol-name">ToolResult</p>
+            <pre><code>ok
+error
+approval_required</code></pre>
+            <p>approval_required 会停止当前 turn，Runtime Control 设置 waiting_approval 并恢复同一个 tool call。</p>
+          </article>
+
+          <article class="protocol-card">
+            <p class="protocol-name">ToolDefinition</p>
+            <pre><code>name
+description
+inputSchema
+category:
+  safe | write | dangerous</code></pre>
+            <p>inputSchema 在实现中必须使用 zod。category 进入 PermissionEngine 的判断输入。</p>
+          </article>
+
+          <article class="protocol-card">
+            <p class="protocol-name">PermissionDecision</p>
+            <pre><code>allow
+ask
+deny</code></pre>
+            <p>PermissionEngine 只做判断，不等待用户、不保存 pendingApproval；ask 由 Runtime Control 转成 waiting_approval。</p>
+          </article>
+
+          <article class="protocol-card">
+            <p class="protocol-name">Recorder</p>
+            <pre><code>RunEvent
+TranscriptItem
+Checkpoint</code></pre>
+            <p>事件用于 replay/eval/debug；转录用于展示；checkpoint 用于 resume，不靠事件重放恢复。</p>
+          </article>
+
+          <article class="protocol-card">
+            <p class="protocol-name">Config precedence</p>
+            <pre><code>built-in defaults
+env
+user config
+project config
+CLI flags</code></pre>
+            <p>优先级确定；secret 值不能进入 events、transcript、checkpoint 或 tool/model records。</p>
+          </article>
+        </div>
+
+        <div class="negative-space">
+          <h3>不要事件化内部 debug 细节</h3>
+          <p>
+            Tools.resolve 查了几个 registry、ContextManager 估算了多少 tokens、PermissionEngine 匹配了哪条内部 rule、
+            ProviderAdapter 内部 retry 细节都可以作为 debug log，但不进入稳定 RunEvent。
+          </p>
+        </div>
+
+        <div class="detail-split">
+          <article class="path-card">
+            <h3>Approval path</h3>
+            <ol>
+              <li>AgentLoop 收到 tool_use，发 tool_requested。</li>
+              <li>Tools.runToolCall 做 zod 校验，并请求 PermissionEngine.authorize。</li>
+              <li>PermissionEngine 返回 ask。</li>
+              <li>Tools 返回 approval_required。</li>
+              <li>AgentLoop 把 pending approval 返回 Runtime Control。</li>
+              <li>Runtime Control 设置 status = waiting_approval。</li>
+              <li>Surface 展示审批；批准后 Runtime Control 恢复同一个 tool call。</li>
+            </ol>
+          </article>
+
+          <article class="path-card">
+            <h3>Context overflow path</h3>
+            <ol>
+              <li>ContextManager 检测上下文过大，返回 context_overflow。</li>
+              <li>AgentLoop 发 context_overflow / compaction_started。</li>
+              <li>Memory.compact() 更新 SessionSummary。</li>
+              <li>AgentLoop 只 rebuild 一次。</li>
+              <li>仍失败则返回错误，不静默丢弃消息。</li>
+            </ol>
+          </article>
+        </div>
+
+        <div class="event-catalog">
+          <article>
+            <h3>Session / Run</h3>
+            <p>session_created · session_resumed · session_closed · run_started · run_finished · run_failed · run_cancelled</p>
+          </article>
+          <article>
+            <h3>Turn / Context</h3>
+            <p>turn_started · context_built · context_overflow · turn_finished · turn_failed</p>
+          </article>
+          <article>
+            <h3>Model / Tool</h3>
+            <p>model_started · model_delta · model_finished · model_failed · tool_requested · tool_started · tool_finished · tool_failed · tool_denied</p>
+          </article>
+          <article>
+            <h3>Approval / Recovery</h3>
+            <p>approval_requested · approval_resolved · compaction_started · compaction_finished · compaction_failed · checkpoint_started · checkpoint_finished · checkpoint_failed</p>
+          </article>
+        </div>
+
+        <table class="dep-table hook-table">
+          <thead>
+            <tr>
+              <th>Hook point</th>
+              <th>v0.1 行为</th>
+              <th>原因</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>before_tool_call</td>
+              <td>可 deny / modify args</td>
+              <td>工具调用是明确副作用边界，需要拦截能力。</td>
+            </tr>
+            <tr>
+              <td>after_tool_call</td>
+              <td>可 modify result</td>
+              <td>结果进入模型和记录前可做规整、脱敏或展示适配。</td>
+            </tr>
+            <tr>
+              <td>before_user_message</td>
+              <td>可 deny / modify text</td>
+              <td>用户输入进入 ConversationHistory 前是最后治理点。</td>
+            </tr>
+            <tr>
+              <td>before_message_display</td>
+              <td>只修改 display</td>
+              <td>展示适配不能反写 canonical conversation state。</td>
+            </tr>
+            <tr>
+              <td>其他 hook points</td>
+              <td>只观察</td>
+              <td>v0.1 放置扩展点，但不提前实现完整插件执行模型。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section" id="slice">
+        <header class="section-head">
+          <span class="section-num">07</span>
+          <div>
+            <h2 class="section-title">v0.1 最小切片</h2>
+            <p class="section-desc">v0.1 证明 Harness 能跑通，不做成熟编码 Agent 的全部能力。</p>
+          </div>
+        </header>
+
+        <table class="dep-table">
+          <thead>
+            <tr>
+              <th>领域</th>
+              <th>v0.1 包含</th>
+              <th>明确不做</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Surface</td>
+              <td><span class="dep-arrow">CLI</span>，streaming 输出，approval prompt，基本 command 输入</td>
+              <td><span class="dep-skip">Web / API / IDE</span></td>
+            </tr>
+            <tr>
+              <td>Runtime</td>
+              <td>单 live Session，ConversationHistory 唯一写入，CommandDispatcher，checkpoint resume</td>
+              <td>多 Session 调度、复杂 state class 拆分</td>
+            </tr>
+            <tr>
+              <td>Agent</td>
+              <td>ReAct-style AgentLoop，ContextManager，ProviderAdapter streaming contract，overflow compact once</td>
+              <td>ToolExecutor、ExecutionStrategy、TerminationGuard、StateMachineEngine</td>
+            </tr>
+            <tr>
+              <td>Services</td>
+              <td>Tools、Skills、SessionSummary、PersistentMemory、stdio MCP tools、Lifecycle、Hooks、Recorder</td>
+              <td>Subagents、RAG/vector memory、完整插件包格式、MCP HTTP/auth/resources/prompts</td>
+            </tr>
+            <tr>
+              <td>Infrastructure</td>
+              <td>ProviderAdapter、Config、PermissionEngine、MCPClient、CommandRunner、WorkspacePath</td>
+              <td>真实 sandbox、Storage abstraction、ProviderFactory、PolicyStore、SecretsManager、NetworkClient</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="negative-space">
+          <h3>v0.1 明确不做</h3>
+          <p>
+            Web UI · API surface · IDE integration · Subagents · RAG/vector memory · plugin marketplace · Skill fork subagent ·
+            dynamic command injection · live file watching · MCP OAuth/auth/sampling/roots/elicitation · OpenTelemetry export ·
+            SQLite/remote storage · multi-provider parity
+          </p>
+        </div>
+      </section>
+
+      <section class="section" id="roadmap">
+        <header class="section-head">
+          <span class="section-num">08</span>
+          <div>
+            <h2 class="section-title">实现路径与验收</h2>
+            <p class="section-desc">最新文档更强调实现前读取顺序、最小 Harness 闭环和验收条件，而不是堆模块。</p>
+          </div>
+        </header>
+
+        <div class="loop-strip">
+          <p class="loop-strip-label">必读顺序</p>
+          <div class="loop-chain">
+            <span class="loop-step s1">docs/README.md</span><span class="loop-arr">→</span>
+            <span class="loop-step s2">architecture.md</span><span class="loop-arr">→</span>
+            <span class="loop-step s3">scope/v0.1.md</span><span class="loop-arr">→</span>
+            <span class="loop-step s4">spec/v0.1-architecture.md</span><span class="loop-arr">→</span>
+            <span class="loop-step s5">ai-development-guide.md</span><span class="loop-arr">→</span>
+            <span class="loop-step s1">对应 architecture/*.md</span>
+          </div>
+        </div>
+
+        <div class="detail-split roadmap-split">
+          <article class="path-card">
+            <h3>v0.1 Harness 闭环</h3>
+            <ol>
+              <li>启动 CLI session。</li>
+              <li>打开一个小 repo，让 Agent inspect repo。</li>
+              <li>通过 ProviderAdapter 看到 streaming model response。</li>
+              <li>通过 built-in Skill tool 激活一个 Skill。</li>
+              <li>读取、搜索、编辑文件。</li>
+              <li>写入或 shell 前请求 approval，并恢复同一个 tool call。</li>
+              <li>调用一个 stdio MCP tool。</li>
+              <li>生成可检查的 events、transcript、checkpoint。</li>
+            </ol>
+          </article>
+
+          <article class="path-card">
+            <h3>实现前必须回答</h3>
+            <ol>
+              <li>当前任务属于哪个模块？</li>
+              <li>该模块为什么存在，唯一职责是什么？</li>
+              <li>它依赖谁，谁依赖它？</li>
+              <li>它是否会写 live Session 或 Recorder？</li>
+              <li>它是否可能触发 permission ask 或接触 secrets？</li>
+              <li>它是否属于 v0.1 scope？</li>
+              <li>如何测试，是否影响架构边界？</li>
+            </ol>
+          </article>
+        </div>
+
+        <div class="storage-tree" role="img" aria-label="Recorder files">
+          <div class="tree-line"><span class="tree-dir">.opencamille/runs/&lt;runId&gt;/</span></div>
+          <div class="tree-line">├── events.jsonl      <span class="tree-comment">机器读 timeline truth / eval / replay / debug</span></div>
+          <div class="tree-line">├── transcript.jsonl  <span class="tree-comment">人读会话记录 / UI / export / demo</span></div>
+          <div class="tree-line">└── checkpoint.json   <span class="tree-comment">resume source / rehydrate live Session</span></div>
+        </div>
+      </section>
+
+      <section class="section" id="sources">
+        <header class="section-head">
+          <span class="section-num">09</span>
+          <div>
+            <h2 class="section-title">权威资料</h2>
+            <p class="section-desc">页面按这些文档合成；历史研究和开发日志只保留背景，不覆盖当前权威架构。</p>
+          </div>
+        </header>
+
+        <div class="memory-grid">
+          <a class="memory-card tier-1" href="../README.md">
+            <p class="tier-badge">ENTRY</p>
+            <h3>docs/README.md</h3>
+            <p>文档入口、权威顺序、目录说明和 AI Agent 最低要求。</p>
+            <p class="tier-source">read first</p>
+          </a>
+          <a class="memory-card tier-1" href="../architecture.md">
+            <p class="tier-badge">TOP LEVEL</p>
+            <h3>architecture.md</h3>
+            <p>完整五层架构、职责边界、事件流、关键契约。</p>
+            <p class="tier-source">已确认草案</p>
+          </a>
+          <a class="memory-card tier-2" href="../spec/v0.1-architecture.md">
+            <p class="tier-badge">BUILD TARGET</p>
+            <h3>v0.1 architecture spec</h3>
+            <p>当前版本的实现形状、类型契约、顺序和禁止新增的抽象。</p>
+            <p class="tier-source">versioned spec</p>
+          </a>
+          <a class="memory-card tier-3" href="../scope/v0.1.md">
+            <p class="tier-badge">SCOPE</p>
+            <h3>v0.1 scope</h3>
+            <p>最小产品边界、成功标准、Demo target 和 out-of-scope。</p>
+            <p class="tier-source">implementation boundary</p>
+          </a>
+          <a class="memory-card tier-2" href="../architecture-modules.md">
+            <p class="tier-badge">MODULE INDEX</p>
+            <h3>architecture-modules.md</h3>
+            <p>快速定位模块、主执行链路、事件链路、禁止提前抽象。</p>
+            <p class="tier-source">module map</p>
+          </a>
+          <a class="memory-card tier-3" href="../ai-development-guide.md">
+            <p class="tier-badge">AI RULES</p>
+            <h3>ai-development-guide.md</h3>
+            <p>AI 修改项目前必须遵守的 scope、边界、验证和 Definition of Done。</p>
+            <p class="tier-source">developer guardrails</p>
+          </a>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <span>OpenCamille Architecture Front</span>
+        <span class="footer-ref">Generated from docs/architecture.md, docs/scope/v0.1.md, docs/spec/v0.1-architecture.md, docs/architecture/*.md</span>
+      </footer>
     </main>
+
+    <div class="layer-detail-overlay" data-close-layer></div>
+    <aside class="layer-detail-panel" aria-label="架构层详情" aria-hidden="true">
+      <header class="detail-header">
+        <span class="header-accent"></span>
+        <h2>架构层详情</h2>
+        <p class="header-role"></p>
+        <button class="detail-close" type="button" data-close-layer aria-label="关闭详情">×</button>
+      </header>
+      <div class="detail-body"></div>
+    </aside>
+
+    <button class="back-to-top" type="button" aria-label="回到顶部">↑</button>
     <script src="./js/main.js"></script>
   </body>
 </html>

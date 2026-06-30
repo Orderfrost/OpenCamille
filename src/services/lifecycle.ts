@@ -42,32 +42,34 @@ export type EventBus = {
   subscribe(listener: EventListener): () => void;
 };
 
+export class InMemoryEventBus implements EventBus {
+  private readonly listeners = new Set<EventListener>();
+
+  // 一个 listener 失败不能阻止其他 listener 收到事件；错误在全部通知后统一抛出。
+  async emit(event: RunEvent): Promise<void> {
+    const errors: unknown[] = [];
+
+    for (const listener of this.listeners) {
+      try {
+        await listener(event);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "One or more EventBus listeners failed");
+    }
+  }
+
+  subscribe(listener: EventListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+}
+
 export function createEventBus(): EventBus {
-  const listeners = new Set<EventListener>();
-
-  return {
-    // 一个 listener 失败不能阻止其他 listener 收到事件；错误在全部通知后统一抛出。
-    async emit(event) {
-      const errors: unknown[] = [];
-
-      for (const listener of listeners) {
-        try {
-          await listener(event);
-        } catch (error) {
-          errors.push(error);
-        }
-      }
-
-      if (errors.length > 0) {
-        throw new AggregateError(errors, "One or more EventBus listeners failed");
-      }
-    },
-
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  };
+  return new InMemoryEventBus();
 }
