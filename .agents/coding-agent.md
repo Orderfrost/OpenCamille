@@ -59,6 +59,14 @@ For each task:
 - If extra files are required, state whether the change affects architecture, scope, or specs before editing.
 - If implementation reveals an architecture conflict, stop implementation and surface the conflict.
 
+## TypeScript Structure Rules
+
+- Use modules to group related code by responsibility.
+- Use classes for public service boundaries that own dependencies, mutable state, or lifecycle.
+- Keep pure parsing, mapping, and validation details as private helper functions near the class that uses them.
+- Do not create classes that only wrap static utility functions.
+- Preserve small factory functions only when they hide concrete class selection or keep call sites stable.
+
 ## Comment Rules
 
 - Add Chinese comments where they help future developers understand intent.

@@ -50,17 +50,18 @@ emit turn/model/tool lifecycle events
 
 ## ContextManager 职责
 
-输入：
+ContextManager 是 Agent Runtime 层的上下文组装、预算记录、内存缓存和恢复协作组件。它不是通用加载框架，也不是纯字符串拼接函数。
+
+核心职责：
 
 ```text
-base prompt
-project/user rules
-SkillIndex
-active skill body
-tool schemas
-session summary
-persistent memory
-recent ConversationHistory
+收集当前已知 ContextSource
+读取少量固定规则文件
+把来源映射到 system/tools/messages
+计算 context budget
+判断 context_overflow
+维护 session 级 ContextSnapshot 缓存
+支持从 checkpoint 恢复 ContextSnapshot
 ```
 
 输出：
@@ -73,6 +74,35 @@ ContextAssembly
 ```
 
 如果超出上下文预算，返回 `context_overflow`，不要偷偷截断。
+
+ContextManager 允许读取的本地来源只限固定规则文件，例如 `AGENTS.md` / `Agent.md`。复杂来源由其他模块产出 `ContextSource`：
+
+```text
+Tools   -> ToolDefinition source
+MCP     -> MCP ToolDefinition source
+Skills  -> skill summaries / active skill body source
+Memory  -> session summary / persistent memory / retrieved memory source
+```
+
+ContextManager 不做：
+
+```text
+不调用 provider
+不执行 tools
+不扫描 MCP server
+不扫描 Skill 目录
+不检索 Memory
+不压缩 Memory
+不修改 Session
+不写 Recorder 文件
+不做权限判断
+```
+
+详细设计与 Task 6 验收见：
+
+```text
+docs/implementation/v0.1/context-manager-design.md
+```
 
 ## v0.1 执行路径
 
